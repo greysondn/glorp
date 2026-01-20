@@ -54,3 +54,16 @@ class TokenType(Enum):
     EOF        = "eof"
     
     # there are more planned, this is all for now though
+    
+class Token:
+    """
+    A single token in this lexer.
+    """
+    def __init__(self, type_:TokenType, value:str, line:int, column:int):
+        self.type = type_
+        self.value = value
+        self.line = line
+        self.column = column
+    
+    def __repr__(self):
+        return f"Token({self.type.value}: {self.value} at {self.line}:{self.column})"
