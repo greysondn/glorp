@@ -46,6 +46,53 @@ class Lexer:
         # (yes, we want this to go over by one, it's checked elsewhere)
         self.position += 1
     
+    def _handle_identifier(self) -> None:
+         # stash some helpful stuff
+         start_pos:int = self.position
+         start_column:int = self.column
+         
+         # find the end of the identifier
+         while (self.position < len(self.source)):
+            # clumsily eat potentially valid symbols
+            if ((self.current_symbol.isidentifier()) or (self.current_symbol.isdigit())):
+                 self._advance()
+            
+            # should be there, so slice it out
+            end_pos:int = self.position
+            word:str = self.source[start_pos:end_pos]
+            
+            # is that an identifier?
+            if (word.isidentifier()):
+                # set up a swap object
+                swp:Token = Token(TokenType.AND, value=swp.value, line=self.line, column=start_column)
+                
+                # Okay. Now we do something a bit screwy to move forwards
+                # if we call an invalid token type, it'll throw a ValueError so
+                # we can just throw the token type, right?
+                try:
+                    swp.type = TokenType(word)
+                except ValueError:
+                    swp.type = TokenType.IDENTIFIER
+                finally:
+                    # now, we check to see if we caught a type we don't want to
+                    # set, like ones that could still be an identifier
+                    _avoid_list:list[TokenType] = [
+                        TokenType.DEDENT,
+                        TokenType.EOF,
+                        TokenType.INDENT,
+                        TokenType.NEWLINE,
+                    ]
+                    
+                    if(swp.type in _avoid_list):
+                        swp.type = TokenType.IDENTIFIER
+                    
+                    # we should be good to add this now
+                    self.stream.append(swp)
+                    
+            else:
+                raise SyntaxError(f"Unexpected symbol at line {self.line}, column {start_pos}")
+    
+    
     def _handle_newline(self) -> None:
         # enforce whitelist for when to call
         if (self.current_symbol != "\n"):
@@ -76,7 +123,7 @@ class Lexer:
                     self.pending_newline = True
                     self._handle_newline()
                 # okay, but is it whitespace tho?
-                elif (self.current_symbol.isspace()):
+                elif (self.current_symbol == " "):
                     self.current_indent += 1
                     self._advance()
                 else:
@@ -103,6 +150,10 @@ class Lexer:
                         else:
                             raise ValueError(f"Dedent did not match any previous indent at line {self.line}!")
     
+    def _skip_whitespace(self) -> None:
+        while (self.current_symbol == " "):
+            self._advance()
+    
     def tokenize(self, source:str) -> list[Token]:
         # reset self
         self._reset()
@@ -110,12 +161,40 @@ class Lexer:
         
         # now start eating characters
         while (self.position < len(self.source)):
-            # get current character
-            char:str =  self.source[self.position]
-            
-            # handle newline and indent
-            if (char == "\n"):
+            # handle newline and indent/dedent
+            if (self.current_symbol == "\n"):
                 self._handle_newline()
-                
+            
+            # eat whitespace for days
+            self._skip_whitespace()
+            
+            # handle symbol: "("
+            if (self.current_symbol == "("):
+                self.stream.append(Token(TokenType.LPAREN, value="(", line=self.line, column=self.column))
+                self._advance()
+            # handle symbol: ")"
+            elif (self.current_symbol == ")"):
+                self.stream.append(Token(TokenType.RPAREN, value=")", line=self.line, column=self.column))
+                self._advance()
+            # handle symbol: ":"
+            elif(self.current_symbol == ":"):
+                self.stream.append(Token(TokenType.COLON, value=":", line=self.line, column=self.column))
+                self._advance()
+            # handle keywords and identifiers, right?
+            elif ((self.current_symbol.isalpha()) or (self.current_symbol == "_")):
+                self._handle_identifier()
+            else:
+                raise SyntaxError(f"Unexpected character {self.current_symbol} at line {self.line}, column {self.column}")
+        
+        # end of file
+        
+        # staple dedents so stuff is easier later
+        while (len(self.indent_stack) > 1):
+            self.stream.append(Token(TokenType.DEDENT, value=str(self.indent_stack[-1]), line=self.line, column=self.column))
+            self.indent_stack.pop()
+        
+        # staple end of file, we had to have reached it
+        self.stream.append(Token(TokenType.EOF, value="", line=self.line, column=self.column))
+        
         # return stream
         return self.stream
