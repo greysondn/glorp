@@ -52,6 +52,7 @@ class TokenType(Enum):
     INDENT     = "indent"
     DEDENT     = "dedent"
     EOF        = "eof"
+    NEWLINE    = "\n"
     
     # there are more planned, this is all for now though
     
@@ -59,7 +60,7 @@ class Token:
     """
     A single token in this lexer.
     """
-    def __init__(self, type_:TokenType, value:str, line:int, column:int):
+    def __init__(self, type_:TokenType, value:str="", line:int=-1, column:int=-1):
         self.type = type_
         self.value = value
         self.line = line
