@@ -4,6 +4,7 @@ class ASTNode:
 class ASTNodeWithBody(ASTNode):
     def __init__(self):
         self.body:list[ASTNode] = []
+        self.body_indent:int = 0
     
     def add_node(self, node:ASTNode) -> None:
         self.body.append(node)
