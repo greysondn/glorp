@@ -93,7 +93,6 @@ class Parser():
                 # TODO: Handle args
                 self._expect(TokenType.LPAREN)
                 self._expect(TokenType.RPAREN)
-                self._expect(TokenType.NEWLINE)
                 
                 # inject into body
                 swp.add_node(swp_inner)
