@@ -19,7 +19,7 @@ def clean(ctx:Context):
 def test(ctx:Context):
     match platform.system():
         case("Windows"):
-            ctx.run("pytest --showlocals -s")
+            ctx.run("pytest --showlocals -s --timeout=10 --timeout-method=thread")
         case _:
             print(f"Running on unimplemented platform: {platform.system()}")
 

@@ -47,50 +47,53 @@ class Lexer:
         self.position += 1
     
     def _handle_identifier(self) -> None:
-         # stash some helpful stuff
-         start_pos:int = self.position
-         start_column:int = self.column
+        # stash some helpful stuff
+        start_pos:int = self.position
+        start_column:int = self.column
          
-         # find the end of the identifier
-         while (self.position < len(self.source)):
+        # find the end of the identifier
+        keep_eating:bool = True
+        while (self.position < len(self.source) and keep_eating):
             # clumsily eat potentially valid symbols
             if ((self.current_symbol.isidentifier()) or (self.current_symbol.isdigit())):
                  self._advance()
-            
-            # should be there, so slice it out
-            end_pos:int = self.position
-            word:str = self.source[start_pos:end_pos]
-            
-            # is that an identifier?
-            if (word.isidentifier()):
-                # set up a swap object
-                swp:Token = Token(TokenType.AND, value=swp.value, line=self.line, column=start_column)
-                
-                # Okay. Now we do something a bit screwy to move forwards
-                # if we call an invalid token type, it'll throw a ValueError so
-                # we can just throw the token type, right?
-                try:
-                    swp.type = TokenType(word)
-                except ValueError:
-                    swp.type = TokenType.IDENTIFIER
-                finally:
-                    # now, we check to see if we caught a type we don't want to
-                    # set, like ones that could still be an identifier
-                    _avoid_list:list[TokenType] = [
-                        TokenType.DEDENT,
-                        TokenType.EOF,
-                        TokenType.INDENT,
-                        TokenType.NEWLINE,
-                    ]
-                    
-                    if(swp.type in _avoid_list):
-                        swp.type = TokenType.IDENTIFIER
-                    
-                    # we should be good to add this now
-                    self.stream.append(swp)
-                    
             else:
-                raise SyntaxError(f"Unexpected symbol at line {self.line}, column {start_pos}")
+                keep_eating = False
+            
+        # should be there, so slice it out
+        end_pos:int = self.position
+        word:str = self.source[start_pos:end_pos]
+        
+        # is that an identifier?
+        if (word.isidentifier()):
+            # set up a swap object
+            swp:Token = Token(TokenType.AND, value=word, line=self.line, column=start_column)
+            
+            # Okay. Now we do something a bit screwy to move forwards
+            # if we call an invalid token type, it'll throw a ValueError so
+            # we can just throw the token type, right?
+            try:
+                swp.type = TokenType(word)
+            except ValueError:
+                swp.type = TokenType.IDENTIFIER
+            finally:
+                # now, we check to see if we caught a type we don't want to
+                # set, like ones that could still be an identifier
+                _avoid_list:list[TokenType] = [
+                    TokenType.DEDENT,
+                    TokenType.EOF,
+                    TokenType.INDENT,
+                    TokenType.NEWLINE,
+                ]
+                
+                if(swp.type in _avoid_list):
+                    swp.type = TokenType.IDENTIFIER
+                
+                # we should be good to add this now
+                self.stream.append(swp)
+                
+        else:
+            raise SyntaxError(f"Unexpected symbol at line {self.line}, column {start_pos}")
     
     
     def _handle_newline(self) -> None:
@@ -139,7 +142,7 @@ class Lexer:
                     # less in is hard
                     if (self.current_indent < self.indent_stack[-1]):
                         # pop them off until we're not less any more
-                        while self.current_indent < self.indent_stack[-1]:
+                        while (self.current_indent < self.indent_stack[-1]):
                             self.indent_stack.pop()
                         
                         # and now two things are possible
@@ -194,7 +197,7 @@ class Lexer:
             self.indent_stack.pop()
         
         # staple end of file, we had to have reached it
-        self.stream.append(Token(TokenType.EOF, value="", line=self.line, column=self.column))
+        self.stream.append(Token(TokenType.EOF, value="EOF", line=self.line, column=self.column))
         
         # return stream
         return self.stream
