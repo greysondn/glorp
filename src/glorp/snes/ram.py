@@ -10,17 +10,25 @@ class RAMStatus(Enum):
     FILLED = "filled"
     """The RAM has a known status of in-use """
 
+class RAMValueStatus(Enum):
+    UNKNOWN = "unknown"
+    """We can't be sure of the value of the RAM right now"""
+    
+    KNOWN = "known"
+    """We know the value of the RAM now"""
+
 class RAMByte():
     def __init__(self, value=0x00):
         self._status:RAMStatus = RAMStatus.UNKNOWN
         self._value:int = 0x00
+        self._value_status:RAMValueStatus = RAMValueStatus.UNKNOWN
         self._mirrors:set[RAMByte] = set()
         self._recursive_guard:bool = False
         
         # set value
         self.value = value
         
-        # set status again just to be sure
+        # set statuses again just to be sure
         self.status = RAMStatus.UNKNOWN 
     
     @property
@@ -55,11 +63,27 @@ class RAMByte():
             # now we set it
             self._value = val
             self._status = RAMStatus.FILLED
+            self._value_status = RAMValueStatus.KNOWN
         
             for mirror in self._mirrors:
                 mirror.value = val
-                mirror.status = RAMStatus.FILLED
             
+            self._reset_recursive_guard()
+    
+    @property
+    def value_status(self) -> RAMValueStatus:
+        return self._value_status
+    
+    @value_status.setter
+    def value_status(self, val:RAMValueStatus) -> None:
+        if (not self._recursive_guard):
+            self._recursive_guard = True
+            
+            self._value_status = val
+            
+            for mirror in self._mirrors:
+                mirror.value_status = val
+        
             self._reset_recursive_guard()
     
     def _reset_recursive_guard(self):
@@ -83,6 +107,7 @@ class RAMByte():
         practice.
         """
         self.status = RAMStatus.EMPTY
+        self.value_status = RAMValueStatus.UNKNOWN
     
     def reset(self):
         """
@@ -92,6 +117,7 @@ class RAMByte():
         practice.
         """
         self.status = RAMStatus.UNKNOWN
+        self.value_status = RAMValueStatus.UNKNOWN
 
 class RAMSegment():
     def __init__(self, start:int, length:int):
