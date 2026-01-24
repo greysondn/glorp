@@ -61,6 +61,46 @@ class RAMByte():
         """
         self.status = RAMStatus.UNKNOWN
 
+class RAMSegment():
+    def __init__(self, start:int, length:int):
+        self.start:int = start
+        """The start address of this in memory."""
+        self.length:int = length
+        """The end address of this in memory."""
+        
+        self.bytes:list[RAMByte] = [RAMByte()] * length
+        """The internal data from this."""
+    
+    def _offset_address(self, address:int) -> int:
+        return address - self.start
+    
+    def get_byte_handles(self, start:int, length:int) -> list[RAMByte]:
+        return self.bytes[start:(start+length)]
+    
+    def set_byte_handles(self, start:int, bytes_:list[RAMByte]):
+        for i in range(len(bytes_)):
+            self.bytes[start + i] = bytes_[i]
+    
+    def allocate(self, address:int, length:int) -> int:
+        raise NotImplementedError
+    
+    def allocate_any(self, length:int) -> int:
+        # allocate this in first worst style
+        raise NotImplementedError
+    
+    def deallocate(self, address:int, length:int) -> None:
+        for i in range(length):
+            self.bytes[self._offset_address(address + i)].delete()
+    
+    def get_byte(self, address:int) -> RAMByte:
+        return self.bytes[self._offset_address(address)]
+    
+    def get_value(self, address:int) -> int:
+        return self.bytes[self._offset_address(address)].value
+    
+    def set_value(self, address:int, value:int) -> None:
+        self.bytes[self._offset_address(address)].value = value
+    
 class SnesVariable():
     def __init__(self, name:str, start:int, end:int, type_:str):
         self.name = name
