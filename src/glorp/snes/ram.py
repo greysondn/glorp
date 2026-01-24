@@ -1,3 +1,66 @@
+from enum import Enum
+
+class RAMStatus(Enum):
+    UNKNOWN = "unknown"
+    """We don't know the status of the RAM."""
+    
+    EMPTY = "empty"
+    """The RAM has a known status of empty"""
+    
+    FILLED = "filled"
+    """The RAM has a known status of in-use """
+
+class RAMByte():
+    def __init__(self, value=0x00):
+        self._status:RAMStatus = RAMStatus.UNKNOWN
+        self._value:int = 0x00
+        
+        # set value
+        self.value = value
+        
+        # set status again just to be sure
+        self.status = RAMStatus.UNKNOWN 
+    
+    @property
+    def status(self) -> RAMStatus:
+        return self._status
+    
+    @status.setter
+    def status(self, val:RAMStatus) -> None:
+        self._status = val
+    
+    @property
+    def value(self) -> int:
+        return self._value
+    
+    @value.setter
+    def value(self, val:int) -> None:
+        # constraints
+        if ((val < 0x00) or (val > 255)):
+            raise ValueError("Byte must be between 0x00 and 0xFF (0 and 255)")
+        
+        # now we set it
+        self._value = val
+        self._status = RAMStatus.FILLED
+    
+    def delete(self):
+        """
+        Just marks this byte as empty.
+        
+        Does not set this byte's value as zero. That's because it's realistic in
+        practice.
+        """
+        self.status = RAMStatus.EMPTY
+    
+    def reset(self):
+        """
+        Just marks this byte as unknown.
+        
+        Does not set this byte's value as zero. That's because it's realistic in
+        practice.
+        """
+        self.status = RAMStatus.UNKNOWN
+
 class SnesVariable():
     def __init__(self, name:str, start:int, end:int, type_:str):
         self.name = name
