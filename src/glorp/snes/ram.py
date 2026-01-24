@@ -208,6 +208,85 @@ class SNESSystemRam():
                 right:RAMByte = mirror_bytes[left_idx + 1]
                 left.add_mirror(right)
         
+        # side trip - internal common mirroring function now that we're done with wram
+        def ___common_mirror(range_start, range_end):
+            for byte_address in range(range_start, range_end):
+                mirror_bytes:list[RAMByte] = []
+            
+                for bank_val in range(0x00, 0x40):
+                    mirror_addr:int = (bank_val * 0x10000) + byte_address
+                    mirror_bytes.append(self.all.get_byte(mirror_addr))
+                
+                for bank_val in range(0x80, 0xC0):
+                    mirror_addr:int = (bank_val * 0x10000) + byte_address
+                    mirror_bytes.append(self.all.get_byte(mirror_addr))
+                
+                for left_idx in range(len(mirror_bytes) - 1):
+                    left:RAMByte = mirror_bytes[left_idx]
+                    right:RAMByte = mirror_bytes[left_idx + 1]
+                    left.add_mirror(right)
+        
+        # ppu/apu basic setup and mirroring (common mirror type)
+        self.ppu_apu:RAMSegment = RAMSegment.from_segment(self.all, 0x002000, 0x1FFF + 1)
+        ___common_mirror(0x2000, 0x4000)
+        
+        # controller basic setup and mirroring (common mirror type)
+        self.controller:RAMSegment = RAMSegment.from_segment(self.all, 0x4000, 0x01FF + 1)
+        ___common_mirror(0x4000, 0x4200)
+        
+        # CPU/DMA basic setup and mirror (common mirror type)
+        self.cpu_dma:RAMSegment = RAMSegment.from_segment(self.all, 0x4200, 0x1DFF + 1)
+        ___common_mirror(0x4200, 0x6000)
+        
+        # expansion basic setup and mirror (common mirror type)
+        self.expansion:RAMSegment = RAMSegment.from_segment(self.all, 0x6000, 0x1FFF + 1)
+        ___common_mirror(0x4200, 0x6000)
+        
+        # ROM sort of defies basic setup but
+        # we can at least get all the addresses together, right?
+        # so this is sparse, you better know what you're doing
+        self.rom:RAMSegment = RAMSegment(0x000000, 0x7DFFFF + 1)
+        
+        for bank_idx in range(0x00, 0x3F + 1):
+            swp_start:int = (bank_idx * 0x010000) + 0x008000
+            swp:list[RAMByte] = self.all.get_byte_handles(swp_start, 0x7FFF + 1)
+            self.rom.set_byte_handles(swp_start, swp)
+        
+        for bank_idx in range(0x40, 0x7D + 1):
+            swp_start:int = bank_idx * 0x010000
+            swp:list[RAMByte] = self.all.get_byte_handles(swp_start, 0xFFFF + 1)
+            self.rom.set_byte_handles(swp_start, swp)
+        
+        for bank_idx in range(0xFE, 0xFF + 1):
+            # there's no mirrors for these two banks.
+            swp_start:int = bank_idx * 0x010000
+            swp:list[RAMByte] = self.all.get_byte_handles(swp_start, 0xFFFF + 1)
+            self.rom.set_byte_handles(swp_start, swp)
+        
+        # ROM mirroring
+        # oodelady. Think we can do it in two very similar loops, though
+        for byte_address in range(0x8000, 0xFFFF + 1):
+            for bank_offset in range(0x00, 0x3F + 1):
+                left_addr:int = (0x000000 + (0x010000 * bank_offset)) + byte_address
+                right_addr:int = (0x800000 + (0x010000 * bank_offset)) + byte_address
+                
+                left:RAMByte = self.all.get_byte(left_addr)
+                right:RAMByte = self.all.get_byte(right_addr)
+                
+                left.add_mirror(right)
+        
+        for byte_address in range(0x0000, 0xFFFF + 1):
+            for bank_offset in range(0x40, 0x7D + 1):
+                left_addr:int = (0x000000 + (0x010000 * bank_offset)) + byte_address
+                right_addr:int = (0x800000 + (0x010000 * bank_offset)) + byte_address
+                
+                left:RAMByte = self.all.get_byte(left_addr)
+                right:RAMByte = self.all.get_byte(right_addr)
+                
+                left.add_mirror(right)
+        
+        # that should be all the virtual memory set up and mirrored
+        
 class SNESProcessStatusRegister():
     def __init__(self):
         self._emulation:int|None = None
