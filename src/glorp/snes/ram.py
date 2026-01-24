@@ -14,6 +14,8 @@ class RAMByte():
     def __init__(self, value=0x00):
         self._status:RAMStatus = RAMStatus.UNKNOWN
         self._value:int = 0x00
+        self._mirrors:set[RAMByte] = set()
+        self._recursive_guard:bool = False
         
         # set value
         self.value = value
@@ -27,7 +29,15 @@ class RAMByte():
     
     @status.setter
     def status(self, val:RAMStatus) -> None:
-        self._status = val
+        if (not self._recursive_guard):
+            self._recursive_guard = True
+            
+            self._status = val
+            
+            for mirror in self._mirrors:
+                mirror.status = val
+        
+            self._reset_recursive_guard()
     
     @property
     def value(self) -> int:
@@ -35,13 +45,35 @@ class RAMByte():
     
     @value.setter
     def value(self, val:int) -> None:
-        # constraints
-        if ((val < 0x00) or (val > 255)):
-            raise ValueError("Byte must be between 0x00 and 0xFF (0 and 255)")
+        if (not self._recursive_guard):
+            self._recursive_guard = True
+            
+            # constraints
+            if ((val < 0x00) or (val > 255)):
+                raise ValueError("Byte must be between 0x00 and 0xFF (0 and 255)")
+            
+            # now we set it
+            self._value = val
+            self._status = RAMStatus.FILLED
         
-        # now we set it
-        self._value = val
-        self._status = RAMStatus.FILLED
+            for mirror in self._mirrors:
+                mirror.value = val
+                mirror.status = RAMStatus.FILLED
+            
+            self._reset_recursive_guard()
+    
+    def _reset_recursive_guard(self):
+        # only reset if it's not been reset yet
+        if (self._recursive_guard):
+            self._recursive_guard = False
+            
+            for mirror in self._mirrors:
+                mirror._reset_recursive_guard()
+    
+    def add_mirror(self, other:"RAMByte"):
+        if other is not self:
+            self._mirrors.add(other)
+            other._mirrors.add(self)
     
     def delete(self):
         """
@@ -100,96 +132,55 @@ class RAMSegment():
     
     def set_value(self, address:int, value:int) -> None:
         self.bytes[self._offset_address(address)].value = value
-    
-class SnesVariable():
-    def __init__(self, name:str, start:int, end:int, type_:str):
-        self.name = name
-        self.start = start
-        self.end   = end
-        self.type  = type_
-    
-    @property
-    def length(self) -> int:
-        return (self.end - self.start)
-    
-    @property
-    def value(self):
-        raise NotImplementedError()
-    
-    @value.setter
-    def value(self, val):
-        raise NotImplementedError()
-
-class SNESRamSegment():
-    def __init__(self, name:str, start:int, end:int):
-        self.name   = name
-        self.start  = start
-        self.end    = end
-        self.parents:list[SNESBank] = []
         
-    def add_to(self, new_parent:"SNESBank"):
-        new_parent.add(self)
-        self.parents.append(new_parent)
-    
-class SNESBank():
-    def __init_(self, index:int, start:int, end:int):
-        self.index = index
-        self.start = start
-        self.end   = end
-    
-        self.segments:dict[str, SNESRamSegment] = {}
-        
-    def add(self, segment:SNESRamSegment):
-        self.segments[segment.name] = segment
+    @classmethod
+    def from_segment(cls, source:"RAMSegment", address:int, length:int) -> "RAMSegment":
+        ret:RAMSegment = cls(address, length)
+        swp:list[RAMByte] = source.get_byte_handles(address, length)
+        ret.set_byte_handles(address, swp)
+        return ret
 
 class SNESSystemRam():
     def __init__(self):
-        # just assemble it in order though
-        self._banks:list[SNESBank] = []
+        self.all:RAMSegment = RAMSegment(0, (0xFFFFFF + 1))
         
-        # set up segments
-        lowram:SNESRamSegment     = SNESRamSegment("lowram",     0x0000, 0x1FFF)
-        ppu_apu:SNESRamSegment    = SNESRamSegment("ppu_apu",    0x2000, 0x3FFF)
-        controller:SNESRamSegment = SNESRamSegment("controller", 0x4000, 0x41FF)
-        cpu_dma:SNESRamSegment    = SNESRamSegment("cpu_dma",    0x4200, 0x5FFF)
-        expansion:SNESRamSegment  = SNESRamSegment("expansion",  0x6000, 0x7FFF)
+        # now we can just get all the banks together
+        self.banks:list[RAMSegment] = []
         
-        wram_low:SNESRamSegment   = SNESRamSegment("wram_low",   0x2000, 0xFFFF)
-        wram_high:SNESRamSegment  = SNESRamSegment("wram_high",  0x0000, 0xFFFF)
-        
-        # set up banks
-        for _ in range(256):
-            self._banks.append(SNESBank())
+        for i in range(256):
+            bank_start:int = i * 0x010000
             
-        # set up all mirrors of a lot of stuff
-        for i in range(0x40):
-            self._banks[i].add(lowram)
-            self._banks[i].add(ppu_apu)
-            self._banks[i].add(controller)
-            self._banks[i].add(cpu_dma)
-            self._banks[i].add(expansion)
+            bank:RAMSegment = RAMSegment.from_segment(self.all, bank_start, 0x10000)
+            self.banks.append(bank)
         
-        self._banks[0x7E].add(lowram)
+        # wram - basic setup
+        self.wram_all:RAMSegment     = RAMSegment.from_segment(self.all, 0x7E0000, 0x10000)
+        self.wram_stack:RAMSegment   = RAMSegment.from_segment(self.all, 0x7E0000, 0x1FFF + 1)
+        self.wram_scratch:RAMSegment = RAMSegment.from_segment(self.all, 0x7E2000, 0xDFFF + 1)
         
-        for i in range(0x80, 0xC0):
-            self._banks[i].add(lowram)
-            self._banks[i].add(ppu_apu)
-            self._banks[i].add(controller)
-            self._banks[i].add(cpu_dma)
-            self._banks[i].add(expansion)
+        # wram - mirroring - all
+        for byte_address in range(0x10000):
+            left:RAMByte = self.all.get_byte(0x7E0000 + byte_address)
+            right:RAMByte = self.all.get_byte(0x7F0000 + byte_address)
         
-        # set up wram
-        self._banks[0x7E].add(wram_low)
-        self._banks[0x7F].add(wram_high)
+            left.add_mirror(right)
         
-        # set up underlying data
-        self._data:bytearray = bytearray(0xFFFFFF)
-        self._used:list[bool] = [False] * 0xFFFFFF
-        
-        # vars
-        self._vars:dict[str, SnesVariable] = {}
-        
-        
+        # wram - mirroring - stack
+        for byte_address in range(0x2000):
+            mirror_bytes:list[RAMByte] = []
+            
+            for bank_val in range(0x00, 0x40):
+                mirror_addr:int = (bank_val * 0x10000) + byte_address
+                mirror_bytes.append(self.all.get_byte(mirror_addr))
+            
+            for bank_val in range(0x7E, 0xC0):
+                mirror_addr:int = (bank_val * 0x10000) + byte_address
+                mirror_bytes.append(self.all.get_byte(mirror_addr))
+            
+            for left_idx in range(len(mirror_bytes) - 1):
+                left:RAMByte = mirror_bytes[left_idx]
+                right:RAMByte = mirror_bytes[left_idx + 1]
+                left.add_mirror(right)
         
 class SNESProcessStatusRegister():
     def __init__(self):
